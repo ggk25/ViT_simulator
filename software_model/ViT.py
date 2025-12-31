@@ -1,0 +1,99 @@
+import sys
+import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+from utils import DataType
+from utils import Tensor
+from utils import data_type_dict
+from utils import size
+from .operator import matmul, softmax, layernorm, gelu, element_wise_mul_add
+from .misc import quantization ,reshape ,split ,transpose ,Concat
+from hardware_model import chip
+
+class ViT():
+    def __init__(self, 
+                datatype: DataType, 
+                patch_size = 768 ,
+                hidden_dim = 384 ,
+                head_dim = 64 ,
+                n_attn_heads = 6 ,
+                intermediate_size= 1536,
+                n_layers = 12 ,
+                TP=1
+        ):
+        self.datatype = datatype
+        self.patch_size = patch_size
+        self.hidden_dim = hidden_dim
+        self.head_dim = head_dim
+        self.n_attn_heads = n_attn_heads
+        self.intermediate_size = intermediate_size
+        self.n_layers = n_layers
+        self.TP = TP
+
+        self.embedding = Tensor([self.patch_size, self.hidden_dim], self.datatype)
+        #attention weights
+        self.WQ = Tensor([self.hidden_dim, self.head_dim*self.n_attn_heads], self.datatype)
+        self.WK = Tensor([self.hidden_dim, self.head_dim*self.n_attn_heads], self.datatype)
+        self.WV = Tensor([self.hidden_dim, self.head_dim*self.n_attn_heads], self.datatype)
+        self.WO = Tensor([self.head_dim*self.n_attn_heads, self.hidden_dim], self.datatype)
+
+        #ffn weights
+        self.W_linear_up = Tensor([self.hidden_dim, self.intermediate_size], self.datatype)
+        self.W_linear_down = Tensor([self.intermediate_size, self.hidden_dim], self.datatype)
+        
+        self.patch_embedding = matmul(self.datatype)
+        #attention
+        self.attn_layernorm = layernorm(self.datatype)
+        self.Q_proj = matmul(self.datatype)
+        self.K_proj = matmul(self.datatype)
+        self.V_proj = matmul(self.datatype)
+        self.Q_reshape = reshape(self.datatype)
+        self.K_reshape = reshape(self.datatype)
+        self.V_reshape = reshape(self.datatype)
+        self.K_transpose = transpose(self.datatype)
+        self.QKT = matmul(self.datatype)
+        self.softmax = softmax(self.datatype)
+        self.SV = matmul(self.datatype)
+        self.SV_reshape = reshape(self.datatype)
+        self.O_proj = matmul(self.datatype)
+        self.attn_resadd = element_wise_mul_add(self.datatype)
+        
+        #ffn
+        self.ffn_layernorm = layernorm(self.datatype)
+        self.ffn_linear_up = matmul(self.datatype)
+        self.ffn_gelu = gelu(self.datatype)
+        self.ffn_linear_down = matmul(self.datatype)
+        self.ffn_resadd = element_wise_mul_add(self.datatype)
+    
+    def __call__(self, input: Tensor) -> Tensor:
+        b, s, d = input.shape
+        assert d == self.patch_size
+        input = self.patch_embedding(input, self.embedding)
+        #attention
+        input = self.attn_layernorm(input)
+        q = self.Q_proj(input, self.WQ)
+        q = self.Q_reshape(q, [b, self.n_attn_heads, s, self.head_dim])
+        k = self.K_proj(input, self.WK)
+        k = self.K_reshape(k, [b, self.n_attn_heads, s, self.head_dim])
+        k = self.K_transpose(k, [0 ,1 ,3, 2])
+        v = self.V_proj(input, self.WV)
+        v = self.V_reshape(v, [b, self.n_attn_heads, s, self.head_dim])
+        qkT = self.QKT(q, k)
+        Score = self.softmax(qkT)
+        SV = self.SV(Score, v)
+        SV = self.SV_reshape(SV, [b, s, self.n_attn_heads*self.head_dim])
+        O = self.O_proj(SV, self.WO)
+        attn_output = self.attn_resadd(input, O)
+        #ffn
+        ffn_input = self.ffn_layernorm(attn_output)
+        ffn_output = self.ffn_linear_up(ffn_input, self.W_linear_up)
+        ffn_output = self.ffn_gelu(ffn_output)
+        ffn_output = self.ffn_linear_down(ffn_output, self.W_linear_down)
+        output = self.ffn_resadd(attn_output, ffn_output)
+        return output
+    
+    def mapping_and_simulate(self, chip: chip) :
+        operator_latency = []
+        total_latency = 0
+        
+        return operator_latency, total_latency
