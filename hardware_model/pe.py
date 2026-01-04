@@ -22,7 +22,9 @@ class vector_unit:
         self.data_type = data_type
 
 vector_unit_dict = {
-    "dcim": vector_unit(word_size=4, cycle_per_exp=15, cycle_per_reciprocal=12, cycle_per_reciprocal_sqrt=15, cycle_per_vector_loop=1, cycle_per_vector_ldst=2, vector_width=32),
+    "dcim": vector_unit(word_size=4, cycle_per_exp=15, cycle_per_reciprocal=12, \
+                        cycle_per_reciprocal_sqrt=15, cycle_per_vector_loop=1, \
+                        cycle_per_vector_ldst=2, vector_width=128),
 }
 
 class mme:
@@ -41,7 +43,8 @@ class mme:
         self.output_word_size = output_word_size
 
 mme_dict = {
-    "dcim": mme(array_height=32, array_width=32, mac_per_cycle=1, input_word_size=1, output_word_size=4),
+    "dcim": mme(array_height=32, array_width=32, mac_per_cycle=1, input_word_size=1,\
+                output_word_size=4),
 }
 
 class rram:
@@ -70,7 +73,8 @@ class pe:
         self.mme = mme
         self.rram = rram
 pe_dict = {
-    "dcim": pe(vector_unit=vector_unit_dict["dcim"], mme=mme_dict["dcim"], rram=rram_dict["dcim"]),
+    "dcim": pe(vector_unit=vector_unit_dict["dcim"], mme=mme_dict["dcim"], \
+               rram=rram_dict["dcim"]),
 }
 
         

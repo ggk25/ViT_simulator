@@ -6,9 +6,9 @@ from utils import DataType
 from utils import Tensor
 from utils import data_type_dict
 from utils import size
-from .operator import matmul, softmax, layernorm, gelu, element_wise_mul_add
-from .misc import quantization ,reshape ,split ,transpose ,Concat
-from hardware_model import chip
+from software_model.operator import matmul, softmax, layernorm, gelu, res_add, all_reduce
+from software_model.misc import quantization ,reshape ,split ,transpose ,Concat
+from hardware_model.chip import chip, chip_dict
 
 class ViT():
     def __init__(self, 
@@ -56,14 +56,15 @@ class ViT():
         self.SV = matmul(self.datatype)
         self.SV_reshape = reshape(self.datatype)
         self.O_proj = matmul(self.datatype)
-        self.attn_resadd = element_wise_mul_add(self.datatype)
+        self.attn_all_reduce = all_reduce(self.datatype)
+        self.attn_resadd = res_add(self.datatype)
         
         #ffn
         self.ffn_layernorm = layernorm(self.datatype)
         self.ffn_linear_up = matmul(self.datatype)
         self.ffn_gelu = gelu(self.datatype)
         self.ffn_linear_down = matmul(self.datatype)
-        self.ffn_resadd = element_wise_mul_add(self.datatype)
+        self.ffn_resadd = res_add(self.datatype)
     
     def __call__(self, input: Tensor) -> Tensor:
         b, s, d = input.shape
@@ -83,6 +84,7 @@ class ViT():
         SV = self.SV(Score, v)
         SV = self.SV_reshape(SV, [b, s, self.n_attn_heads*self.head_dim])
         O = self.O_proj(SV, self.WO)
+        O = self.attn_all_reduce(O)
         attn_output = self.attn_resadd(input, O)
         #ffn
         ffn_input = self.ffn_layernorm(attn_output)
@@ -95,5 +97,46 @@ class ViT():
     def mapping_and_simulate(self, chip: chip) :
         operator_latency = []
         total_latency = 0
+
+        def add_op(name, res):
+            nonlocal total_latency
+            latency, components, loop_order = res
+            operator_latency.append({
+                "Name": name,
+                "Total Latency": latency,
+                "SRAM Latency": components[0],
+                "RRAM Latency": components[1],
+                "MME Latency": components[2],
+                "Vector Latency": components[3],
+                "Best Loop Order": loop_order
+            })
+            total_latency += latency
+
+        add_op("patch_embedding", self.patch_embedding.mapping_and_simulate(chip, is_MHA=False))
+        for i in range(self.n_layers):
+            add_op(f"layer_{i}_attn_layernorm", self.attn_layernorm.mapping_and_simulate(chip))
+            add_op(f"layer_{i}_Q_proj", self.Q_proj.mapping_and_simulate(chip, is_MHA=False))
+            add_op(f"layer_{i}_K_proj", self.K_proj.mapping_and_simulate(chip, is_MHA=False))
+            add_op(f"layer_{i}_V_proj", self.V_proj.mapping_and_simulate(chip, is_MHA=False))
+            add_op(f"layer_{i}_QKT", self.QKT.mapping_and_simulate(chip, is_MHA=True))
+            add_op(f"layer_{i}_softmax", self.softmax.mapping_and_simulate(chip))
+            add_op(f"layer_{i}_SV", self.SV.mapping_and_simulate(chip, is_MHA=True))
+            add_op(f"layer_{i}_O_proj", self.O_proj.mapping_and_simulate(chip, is_MHA=False))
+            add_op(f"layer_{i}_attn_all_reduce", self.attn_all_reduce.mapping_and_simulate(chip))
+            add_op(f"layer_{i}_attn_resadd", self.attn_resadd.mapping_and_simulate(chip))
+            add_op(f"layer_{i}_ffn_layernorm", self.ffn_layernorm.mapping_and_simulate(chip))
+            add_op(f"layer_{i}_ffn_linear_up", self.ffn_linear_up.mapping_and_simulate(chip, is_MHA=False))
+            add_op(f"layer_{i}_ffn_gelu", self.ffn_gelu.mapping_and_simulate(chip))
+            add_op(f"layer_{i}_ffn_linear_down", self.ffn_linear_down.mapping_and_simulate(chip, is_MHA=False))
+            add_op(f"layer_{i}_ffn_resadd", self.ffn_resadd.mapping_and_simulate(chip))
         
         return operator_latency, total_latency
+
+if __name__ == "__main__":
+    ViT_inference = ViT(data_type_dict["int8"])
+    chip = chip_dict["dcim_chip"]
+    input = Tensor([1, 196, 768], data_type_dict["int8"])
+    output = ViT_inference(input)
+    operator_latency, total_latency = ViT_inference.mapping_and_simulate(chip)
+    print("Operator Latency:", operator_latency)
+    print("Total Latency:", total_latency)

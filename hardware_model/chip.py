@@ -1,4 +1,4 @@
-from pe import pe, pe_dict
+from hardware_model.pe import pe, pe_dict
 
 class chip:
     def __init__(

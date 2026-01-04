@@ -5,7 +5,6 @@ from utils import DataType
 from utils import Tensor
 from utils import data_type_dict
 from utils import size
-from hardware_model.device import Device
 from typing import List ,Tuple
 import math
 

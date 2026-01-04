@@ -10,7 +10,7 @@ def simulate_multicore_mapping(M, N, K, B1, B2):
     NUM_PES = 4
     
     # 硬件参数 (单个PE的Tile)
-    Tm, Tn, Tk = 32, 32, 72
+    Tm, Tn, Tk = 64, 6, 384
     size_tile_a = Tm * Tk
     size_tile_b = Tk * Tn
     size_tile_c = Tm * Tn * 4 #input是1byte，output是4byte
@@ -150,8 +150,8 @@ if __name__ == "__main__":
     # --- 运行测试 ---
     # 场景：4个PE，SRAM带宽B1=64 (共享), RRAM带宽B2=16 (独占)
     # 大矩阵
-    M, N, K = 197, 384, 384
-    B1_shared = 512
+    M, N, K = 192, 384, 384
+    B1_shared = 256
     B2_private = 32
 
     perf_data = simulate_multicore_mapping(M, N, K, B1_shared, B2_private)
