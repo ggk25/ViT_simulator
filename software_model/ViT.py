@@ -43,7 +43,7 @@ class ViT():
         
         self.patch_embedding = matmul(self.datatype)
         #attention
-        self.attn_layernorm = layernorm(self.datatype)
+        self.attn_layernorm = layernorm(data_type=data_type_dict["fp32"])
         self.Q_proj = matmul(self.datatype)
         self.K_proj = matmul(self.datatype)
         self.V_proj = matmul(self.datatype)
@@ -52,37 +52,40 @@ class ViT():
         self.V_reshape = reshape(self.datatype)
         self.K_transpose = transpose(self.datatype)
         self.QKT = matmul(self.datatype)
-        self.softmax = softmax(self.datatype)
+        self.softmax = softmax(data_type=data_type_dict["fp32"])
         self.SV = matmul(self.datatype)
         self.SV_reshape = reshape(self.datatype)
         self.O_proj = matmul(self.datatype)
-        self.attn_all_reduce = all_reduce(self.datatype)
-        self.attn_resadd = res_add(self.datatype)
+        self.attn_all_reduce = all_reduce(data_type=data_type_dict["fp32"])
+        self.attn_resadd = res_add(data_type=data_type_dict["fp32"])
         
         #ffn
-        self.ffn_layernorm = layernorm(self.datatype)
+        self.ffn_layernorm = layernorm(data_type=data_type_dict["fp32"])
         self.ffn_linear_up = matmul(self.datatype)
-        self.ffn_gelu = gelu(self.datatype)
+        self.ffn_gelu = gelu(data_type=data_type_dict["fp32"])
         self.ffn_linear_down = matmul(self.datatype)
-        self.ffn_resadd = res_add(self.datatype)
+        self.ffn_resadd = res_add(data_type=data_type_dict["fp32"])
     
     def __call__(self, input: Tensor) -> Tensor:
         b, s, d = input.shape
         assert d == self.patch_size
         input = self.patch_embedding(input, self.embedding)
+        cls_token = Tensor([1,1,self.hidden_dim], self.datatype)
+        concat = Concat(data_type=self.datatype)
+        input = concat([cls_token, input], dim=1)
         #attention
         input = self.attn_layernorm(input)
         q = self.Q_proj(input, self.WQ)
-        q = self.Q_reshape(q, [b, self.n_attn_heads, s, self.head_dim])
+        q = self.Q_reshape(q, [b, self.n_attn_heads, s+1, self.head_dim])
         k = self.K_proj(input, self.WK)
-        k = self.K_reshape(k, [b, self.n_attn_heads, s, self.head_dim])
+        k = self.K_reshape(k, [b, self.n_attn_heads, s+1, self.head_dim])
         k = self.K_transpose(k, [0 ,1 ,3, 2])
         v = self.V_proj(input, self.WV)
-        v = self.V_reshape(v, [b, self.n_attn_heads, s, self.head_dim])
+        v = self.V_reshape(v, [b, self.n_attn_heads, s+1, self.head_dim])
         qkT = self.QKT(q, k)
         Score = self.softmax(qkT)
         SV = self.SV(Score, v)
-        SV = self.SV_reshape(SV, [b, s, self.n_attn_heads*self.head_dim])
+        SV = self.SV_reshape(SV, [b, s+1, self.n_attn_heads*self.head_dim])
         O = self.O_proj(SV, self.WO)
         O = self.attn_all_reduce(O)
         attn_output = self.attn_resadd(input, O)
@@ -100,7 +103,7 @@ class ViT():
 
         def add_op(name, res):
             nonlocal total_latency
-            latency, components, loop_order = res
+            latency, components, loop_order, Tm, Tn, Tk = res
             operator_latency.append({
                 "Name": name,
                 "Total Latency": latency,
@@ -108,7 +111,8 @@ class ViT():
                 "RRAM Latency": components[1],
                 "MME Latency": components[2],
                 "Vector Latency": components[3],
-                "Best Loop Order": loop_order
+                "Best Loop Order": loop_order,
+                "Best tile sizes": (Tm, Tn, Tk) if Tm is not None and Tn is not None and Tk is not None else None
             })
             total_latency += latency
 

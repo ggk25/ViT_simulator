@@ -7,3 +7,8 @@ TODO：
     2. vector算力的调整以及延迟计算方式改进，可能也调整为tile粒度的描述
     3. kernel fusion
     4. 卷积支持
+
+2026 1/6
+1.动态矩阵乘修改为B也从SRAM取
+2.增加tile尺寸变化
+todo：换mapping方式

@@ -43,7 +43,7 @@ class mme:
         self.output_word_size = output_word_size
 
 mme_dict = {
-    "dcim": mme(array_height=32, array_width=32, mac_per_cycle=1, input_word_size=1,\
+    "dcim": mme(array_height=72, array_width=32, mac_per_cycle=1, input_word_size=1,\
                 output_word_size=4),
 }
 
@@ -57,9 +57,9 @@ class rram:
         self.n_macro = n_macro
         self.SA_bitwidth = SA_bitwidth
         self.read_latency = read_latency
-        self.bandwidth = (SA_bitwidth / 8) * n_macro * 1e3  # GB/s
+        self.bandwidth = (SA_bitwidth / 8) * n_macro / read_latency  # GB/s
 rram_dict = {
-    "dcim": rram(n_macro=32, SA_bitwidth=72, read_latency=18),
+    "dcim": rram(n_macro=32, SA_bitwidth=576, read_latency=42),
 }
 
 class pe:

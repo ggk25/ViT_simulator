@@ -18,7 +18,7 @@ chip_dict = {
     "dcim_chip": chip(
         n_pe=4,
         pe=pe_dict["dcim"],
-        sram_bandwidth=128,  # GB/s
+        sram_bandwidth=256,  # GB/s
         frequency=0.5,  # GHz
     ),
 }

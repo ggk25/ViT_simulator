@@ -27,7 +27,8 @@ def run_inference():
         "RRAM Latency": df_ops["RRAM Latency"].sum(),
         "MME Latency": df_ops["MME Latency"].sum(),
         "Vector Latency": df_ops["Vector Latency"].sum(),
-        "Best Loop Order": ""
+        "Best Loop Order": "",
+        "Best tile sizes": ""
     }
     df_ops = pd.concat([df_ops, pd.DataFrame([total_row])], ignore_index=True)
 
@@ -37,7 +38,7 @@ def run_inference():
             "Number of PEs",
             "SRAM Bandwidth (GB/s)",
             "Frequency (GHz)",
-            "PE RRAM Bandwidth (MB/s or GB/s?)",
+            "PE RRAM Bandwidth (GB/s)",
             "MME Array Height",
             "MME Array Width",
             "Vector Unit Width",
